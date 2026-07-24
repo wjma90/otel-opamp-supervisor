@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "o11y-opamp-supervisor.baseConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+    o11y.dev/config-origin: local-base
+  annotations:
+    helm.sh/resource-policy: keep
+    o11y.dev/base-config-id: {{ .Values.identity.baseConfigId | quote }}
+    o11y.dev/base-config-revision: {{ .Values.identity.baseConfigRevision | quote }}
+    o11y.dev/base-config-default: "true"
+    o11y.dev/base-config-managed-by: kubernetes
+    o11y.dev/protected-from-control-plane: "true"
+immutable: true
+data:
+  base.yaml: |
+    {{- include "o11y-opamp-supervisor.baseConfig" . | nindent 4 }}

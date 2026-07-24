@@ -1,0 +1,166 @@
+{{- if .Values.rbac.clusterMonitoring }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "o11y-opamp-supervisor.clusterRoleName" . }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - events
+      - namespaces
+      - namespaces/status
+      - nodes
+      - nodes/proxy
+      - nodes/spec
+      - nodes/stats
+      - persistentvolumeclaims
+      - persistentvolumes
+      - pods
+      - pods/status
+      - replicationcontrollers
+      - replicationcontrollers/status
+      - resourcequotas
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - autoscaling
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - monitoring.coreos.com
+    resources:
+      - podmonitors
+      - servicemonitors
+    verbs:
+      - get
+      - list
+      - watch
+  - nonResourceURLs:
+      - /metrics
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "o11y-opamp-supervisor.clusterRoleName" . }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "o11y-opamp-supervisor.clusterRoleName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "o11y-opamp-supervisor.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if or .Values.rbac.clusterMonitoring (gt (len .Values.rbac.namespacedRules) 0) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "o11y-opamp-supervisor.namespacedRoleName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+rules:
+  {{- if .Values.rbac.clusterMonitoring }}
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    # The LeaseLock implementation used by k8s_leader_elector only gets,
+    # creates and updates its lease. Keeping those verbs in a namespaced Role
+    # prevents the Collector from reading or mutating unrelated leases.
+    verbs:
+      - create
+      - get
+      - update
+  {{- end }}
+  {{- with .Values.rbac.namespacedRules }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "o11y-opamp-supervisor.namespacedRoleName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "o11y-opamp-supervisor.namespacedRoleName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "o11y-opamp-supervisor.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

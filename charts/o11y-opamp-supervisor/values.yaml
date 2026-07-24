@@ -1,0 +1,169 @@
+fullnameOverride: o11y-opamp-supervisor
+
+mode: deployment
+component: collector
+
+image:
+  repository: wjma90/o11y-opamp-supervisor
+  tag: 0.5.4
+  digest: ""
+  pullPolicy: IfNotPresent
+
+identity:
+  serviceName: o11y-supervisor
+  clusterName: local
+  collectorRole: generic
+  baseConfigId: collector-base.local.generic
+  baseConfigRevision: "1"
+
+controlPlane:
+  endpoint: http://control-plane.o11y.svc.cluster.local:4320/v1/opamp
+  authMode: disabled
+  token: ""
+  existingSecret: ""
+  tokenKey: token
+  pollIntervalSeconds: 10
+  tls:
+    enabled: false
+    existingSecret: ""
+    caKey: ca.crt
+
+telemetry:
+  logs:
+    level: info
+
+collector:
+  version: "0.156.0"
+  featureGates: []
+
+workload:
+  replicas: 1
+  deploymentStrategy: Recreate
+  daemonSetUpdateStrategy: RollingUpdate
+
+statefulSet:
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  persistentVolumeClaimRetentionPolicy:
+    enabled: true
+    whenDeleted: Retain
+    whenScaled: Retain
+  headlessService:
+    name: ""
+    publishNotReadyAddresses: true
+    annotations: {}
+    labels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+
+rbac:
+  clusterMonitoring: false
+  clusterRoleName: ""
+  namespacedRules: []
+
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+
+podLabels: {}
+
+imagePullSecrets: []
+
+podSecurityContext:
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  supplementalGroups: []
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+hostMonitoring:
+  enabled: false
+  rootPath: /
+  podLogsPath: /var/log/pods
+
+persistence:
+  enabled: false
+  existingClaim: ""
+  size: 256Mi
+  storageClass: ""
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  annotations: {}
+  labels: {}
+
+extraVolumeClaimTemplates: []
+extraVolumes: []
+extraVolumeMounts: []
+extraEnv: []
+extraEnvFrom: []
+initContainers: []
+extraContainerPorts: []
+
+otlpPorts:
+  enabled: false
+  grpc: 4317
+  http: 4318
+
+service:
+  enabled: false
+  type: ClusterIP
+  annotations: {}
+  labels: {}
+  extraPorts: []
+
+publicService:
+  enabled: false
+  type: NodePort
+  grpcNodePort: 30317
+  httpNodePort: 30318
+
+serviceMonitor:
+  enabled: false
+  labels: {}
+  annotations: {}
+  interval: 60s
+  scrapeTimeout: 40s
+  path: /metrics
+  scheme: http
+  port: monitoring
+  relabelings: []
+  metricRelabelings: []
+
+probes:
+  collectorHealthPort: 13133
+  supervisorHealthPort: 13134
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  startup:
+    periodSeconds: 2
+    failureThreshold: 30

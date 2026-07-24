@@ -1,0 +1,115 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "o11y-opamp-supervisor.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+    o11y.dev/service-role: primary
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "o11y-opamp-supervisor.selectorLabels" . | nindent 4 }}
+  ports:
+    {{- if .Values.otlpPorts.enabled }}
+    - name: otlp-grpc
+      port: {{ .Values.otlpPorts.grpc }}
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: {{ .Values.otlpPorts.http }}
+      targetPort: otlp-http
+      protocol: TCP
+    {{- end }}
+    {{- range .Values.service.extraPorts }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ default "TCP" .protocol }}
+      {{- with .appProtocol }}
+      appProtocol: {{ . }}
+      {{- end }}
+      {{- with .nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- end }}
+{{- end }}
+{{- if eq .Values.mode "statefulset" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "o11y-opamp-supervisor.headlessServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+    o11y.dev/service-role: headless
+    {{- with .Values.statefulSet.headlessService.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.statefulSet.headlessService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: {{ .Values.statefulSet.headlessService.publishNotReadyAddresses }}
+  selector:
+    {{- include "o11y-opamp-supervisor.selectorLabels" . | nindent 4 }}
+  {{- if or .Values.otlpPorts.enabled (gt (len .Values.service.extraPorts) 0) }}
+  ports:
+    {{- if .Values.otlpPorts.enabled }}
+    - name: otlp-grpc
+      port: {{ .Values.otlpPorts.grpc }}
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: {{ .Values.otlpPorts.http }}
+      targetPort: otlp-http
+      protocol: TCP
+    {{- end }}
+    {{- range .Values.service.extraPorts }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ default "TCP" .protocol }}
+      {{- with .appProtocol }}
+      appProtocol: {{ . }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.publicService.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-public
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.publicService.type }}
+  selector:
+    {{- include "o11y-opamp-supervisor.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.otlpPorts.grpc }}
+      targetPort: otlp-grpc
+      nodePort: {{ .Values.publicService.grpcNodePort }}
+      protocol: TCP
+    - name: otlp-http
+      port: {{ .Values.otlpPorts.http }}
+      targetPort: otlp-http
+      nodePort: {{ .Values.publicService.httpNodePort }}
+      protocol: TCP
+{{- end }}

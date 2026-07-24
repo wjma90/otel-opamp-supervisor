@@ -1,0 +1,58 @@
+{{- $baseName := include "o11y-opamp-supervisor.baseConfigName" . -}}
+{{- $headers := dict
+  "X-Service-Name" .Values.identity.serviceName
+  "X-O11y-Cluster" .Values.identity.clusterName
+  "X-O11y-Collector-Role" .Values.identity.collectorRole
+  "X-O11y-Managed-By" "opamp-supervisor"
+  "X-O11y-Supervisor-Version" .Values.image.tag
+  "X-O11y-Collector-Version" .Values.collector.version
+  "X-O11y-Base-Config-ID" .Values.identity.baseConfigId
+  "X-O11y-Base-Config-Source" (printf "ConfigMap/%s/%s:base.yaml" .Release.Namespace $baseName)
+  "X-O11y-Base-Config-Revision" .Values.identity.baseConfigRevision
+  "X-O11y-Base-Config-Default" "true"
+  "X-O11y-Base-Config-Managed-By" "kubernetes"
+  "X-O11y-Transport" "http-poll"
+  "X-O11y-Poll-Interval-Seconds" (toString .Values.controlPlane.pollIntervalSeconds)
+  "X-O11y-OpAMP-Endpoint" .Values.controlPlane.endpoint
+-}}
+{{- if eq .Values.controlPlane.authMode "token" -}}
+{{- $_ := set $headers "Authorization" "Bearer ${env:OPAMP_TOKEN}" -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "o11y-opamp-supervisor.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+data:
+  supervisor.yaml: |
+    server:
+      endpoint: {{ .Values.controlPlane.endpoint | quote }}
+      {{ if .Values.controlPlane.tls.enabled }}
+      tls:
+        ca_file: /etc/o11y/opamp-tls/ca.crt
+      {{ end }}
+      headers:
+        {{- toYaml $headers | nindent 8 }}
+    capabilities:
+      reports_effective_config: true
+      reports_health: true
+      accepts_remote_config: true
+      reports_remote_config: true
+      reports_heartbeat: true
+    agent:
+      executable: /usr/local/bin/otelcol-contrib-wrapper
+      passthrough_logs: true
+      config_files:
+        - /etc/otelcol/base.yaml
+      startup_fallback_configs:
+        - /etc/otelcol/base.yaml
+      validate_config: true
+    storage:
+      directory: /var/lib/opamp
+    healthcheck:
+      endpoint: {{ printf "0.0.0.0:%v" .Values.probes.supervisorHealthPort | quote }}
+    telemetry:
+      logs:
+        level: {{ .Values.telemetry.logs.level }}

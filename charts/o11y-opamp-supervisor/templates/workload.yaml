@@ -1,0 +1,260 @@
+{{- $isDeployment := eq .Values.mode "deployment" -}}
+{{- $isDaemonSet := eq .Values.mode "daemonset" -}}
+{{- $isStatefulSet := eq .Values.mode "statefulset" -}}
+apiVersion: apps/v1
+kind: {{ if $isDaemonSet }}DaemonSet{{ else if $isStatefulSet }}StatefulSet{{ else }}Deployment{{ end }}
+metadata:
+  name: {{ include "o11y-opamp-supervisor.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "o11y-opamp-supervisor.labels" . | nindent 4 }}
+spec:
+  {{- if $isDeployment }}
+  replicas: {{ .Values.workload.replicas }}
+  strategy:
+    type: {{ .Values.workload.deploymentStrategy }}
+  {{- else if $isDaemonSet }}
+  updateStrategy:
+    type: {{ .Values.workload.daemonSetUpdateStrategy }}
+  {{- else }}
+  replicas: {{ .Values.workload.replicas }}
+  serviceName: {{ include "o11y-opamp-supervisor.headlessServiceName" . }}
+  podManagementPolicy: {{ .Values.statefulSet.podManagementPolicy }}
+  updateStrategy:
+    {{- toYaml .Values.statefulSet.updateStrategy | nindent 4 }}
+  {{- if .Values.statefulSet.persistentVolumeClaimRetentionPolicy.enabled }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ .Values.statefulSet.persistentVolumeClaimRetentionPolicy.whenDeleted }}
+    whenScaled: {{ .Values.statefulSet.persistentVolumeClaimRetentionPolicy.whenScaled }}
+  {{- end }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "o11y-opamp-supervisor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "o11y-opamp-supervisor.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/supervisor-config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and (eq .Values.controlPlane.authMode "token") (not .Values.controlPlane.existingSecret) }}
+        checksum/control-plane-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "o11y-opamp-supervisor.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: opamp-supervisor
+          image: {{ include "o11y-opamp-supervisor.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config=/etc/supervisor/supervisor.yaml
+          env:
+            {{- if eq .Values.controlPlane.authMode "token" }}
+            - name: OPAMP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "o11y-opamp-supervisor.controlPlaneSecretName" . }}
+                  key: {{ .Values.controlPlane.tokenKey }}
+            {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: O11Y_COLLECTOR_FEATURE_GATES
+              value: {{ join "," .Values.collector.featureGates | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            {{- if .Values.otlpPorts.enabled }}
+            - name: otlp-grpc
+              containerPort: {{ .Values.otlpPorts.grpc }}
+              protocol: TCP
+            - name: otlp-http
+              containerPort: {{ .Values.otlpPorts.http }}
+              protocol: TCP
+            {{- end }}
+            - name: otel-health
+              containerPort: {{ .Values.probes.collectorHealthPort }}
+              protocol: TCP
+            - name: opamp-health
+              containerPort: {{ .Values.probes.supervisorHealthPort }}
+              protocol: TCP
+            {{- with .Values.extraContainerPorts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: otel-health
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          livenessProbe:
+            tcpSocket:
+              port: opamp-health
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          startupProbe:
+            tcpSocket:
+              port: opamp-health
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: supervisor-config
+              mountPath: /etc/supervisor/supervisor.yaml
+              subPath: supervisor.yaml
+              readOnly: true
+            - name: base-config
+              mountPath: /etc/otelcol/base.yaml
+              subPath: base.yaml
+              readOnly: true
+            - name: opamp-data
+              mountPath: /var/lib/opamp
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.controlPlane.tls.enabled }}
+            - name: opamp-tls
+              mountPath: /etc/o11y/opamp-tls
+              readOnly: true
+            {{- end }}
+            {{- if .Values.hostMonitoring.enabled }}
+            - name: hostfs
+              mountPath: /hostfs
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: supervisor-config
+          configMap:
+            name: {{ include "o11y-opamp-supervisor.fullname" . }}-config
+        - name: base-config
+          configMap:
+            name: {{ include "o11y-opamp-supervisor.baseConfigName" . }}
+        {{- if not (and $isStatefulSet .Values.persistence.enabled) }}
+        - name: opamp-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "o11y-opamp-supervisor.dataClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if .Values.controlPlane.tls.enabled }}
+        - name: opamp-tls
+          secret:
+            secretName: {{ .Values.controlPlane.tls.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.controlPlane.tls.caKey | quote }}
+                path: ca.crt
+        {{- end }}
+        {{- if .Values.hostMonitoring.enabled }}
+        - name: hostfs
+          hostPath:
+            path: {{ .Values.hostMonitoring.rootPath }}
+        - name: varlogpods
+          hostPath:
+            path: {{ .Values.hostMonitoring.podLogsPath }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  {{- if and $isStatefulSet (or .Values.persistence.enabled (gt (len .Values.extraVolumeClaimTemplates) 0)) }}
+  volumeClaimTemplates:
+    {{- if .Values.persistence.enabled }}
+    - metadata:
+        name: opamp-data
+        labels:
+          app.kubernetes.io/name: {{ include "o11y-opamp-supervisor.fullname" . }}
+          app.kubernetes.io/instance: {{ .Release.Name }}
+          {{- with .Values.persistence.labels }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        volumeMode: {{ .Values.persistence.volumeMode }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+    {{- end }}
+    {{- with .Values.extraVolumeClaimTemplates }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}

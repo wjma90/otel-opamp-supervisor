@@ -1,0 +1,250 @@
+{{- if and (eq .Values.mode "daemonset") .Values.persistence.enabled -}}
+{{- fail "persistence.enabled cannot be used with mode=daemonset; use emptyDir per node" -}}
+{{- end -}}
+{{- if and (gt (len .Values.collector.featureGates) 0) (ne (toString .Values.image.tag) (toString .Chart.AppVersion)) -}}
+{{- fail (printf "collector.featureGates requires the bundled Supervisor image %q; image.tag is %q" .Chart.AppVersion .Values.image.tag) -}}
+{{- end -}}
+{{- if and (eq .Values.mode "deployment") .Values.persistence.enabled (gt (int .Values.workload.replicas) 1) -}}
+{{- fail "a replicated Deployment cannot share Supervisor state; use mode=statefulset for persistence per replica" -}}
+{{- end -}}
+{{- if and .Values.persistence.existingClaim (not .Values.persistence.enabled) -}}
+{{- fail "persistence.existingClaim requires persistence.enabled=true" -}}
+{{- end -}}
+{{- if and (eq .Values.mode "statefulset") .Values.persistence.existingClaim -}}
+{{- fail "persistence.existingClaim cannot be used with mode=statefulset; each replica requires its own volumeClaimTemplate" -}}
+{{- end -}}
+{{- if and (ne .Values.mode "statefulset") (gt (len .Values.extraVolumeClaimTemplates) 0) -}}
+{{- fail "extraVolumeClaimTemplates can only be used with mode=statefulset" -}}
+{{- end -}}
+{{- if and (eq .Values.statefulSet.updateStrategy.type "OnDelete") (hasKey .Values.statefulSet.updateStrategy "rollingUpdate") -}}
+{{- fail "statefulSet.updateStrategy.rollingUpdate cannot be set when type=OnDelete" -}}
+{{- end -}}
+{{- if and .Values.publicService.enabled (not .Values.service.enabled) -}}
+{{- fail "publicService.enabled requires service.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.publicService.enabled (not .Values.otlpPorts.enabled) -}}
+{{- fail "publicService.enabled requires otlpPorts.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.service.enabled (not .Values.otlpPorts.enabled) (eq (len .Values.service.extraPorts) 0) -}}
+{{- fail "service.enabled requires otlpPorts.enabled=true or at least one service.extraPorts entry" -}}
+{{- end -}}
+{{- if and (gt (len .Values.service.extraPorts) 0) (not .Values.service.enabled) (ne .Values.mode "statefulset") -}}
+{{- fail "service.extraPorts requires service.enabled=true unless mode=statefulset exposes it on the headless Service" -}}
+{{- end -}}
+{{- if and .Values.serviceMonitor.enabled (not .Values.service.enabled) -}}
+{{- fail "serviceMonitor.enabled requires service.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.rbac.clusterMonitoring (not .Values.hostMonitoring.enabled) -}}
+{{- fail "rbac.clusterMonitoring requires hostMonitoring.enabled=true" -}}
+{{- end -}}
+{{- if and (not .Values.serviceAccount.create) (not .Values.serviceAccount.name) -}}
+{{- fail "serviceAccount.name is required when serviceAccount.create=false" -}}
+{{- end -}}
+{{- if and (eq .Values.controlPlane.authMode "token") (not .Values.controlPlane.existingSecret) (not .Values.controlPlane.token) -}}
+{{- fail "controlPlane.token is required in token mode when controlPlane.existingSecret is empty" -}}
+{{- end -}}
+{{- if and (eq .Values.controlPlane.authMode "disabled") (or .Values.controlPlane.existingSecret .Values.controlPlane.token) -}}
+{{- fail "disabled auth mode must not configure a token or existing Secret" -}}
+{{- end -}}
+{{- if not (has .Values.telemetry.logs.level (list "debug" "info" "warn" "error")) -}}
+{{- fail "telemetry.logs.level must be one of debug, info, warn or error" -}}
+{{- end -}}
+{{- if and .Values.controlPlane.tls.enabled (not .Values.controlPlane.tls.existingSecret) -}}
+{{- fail "controlPlane.tls.existingSecret is required when controlPlane.tls.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.controlPlane.tls.enabled (not (hasPrefix "https://" .Values.controlPlane.endpoint)) -}}
+{{- fail "controlPlane.endpoint must use https:// when controlPlane.tls.enabled=true" -}}
+{{- end -}}
+{{- if and (not .Values.controlPlane.tls.enabled) .Values.controlPlane.tls.existingSecret -}}
+{{- fail "controlPlane.tls.existingSecret requires controlPlane.tls.enabled=true" -}}
+{{- end -}}
+
+{{- $reservedLabels := dict
+  "helm.sh/chart" true
+  "app.kubernetes.io/name" true
+  "app.kubernetes.io/instance" true
+  "app.kubernetes.io/version" true
+  "app.kubernetes.io/component" true
+  "app.kubernetes.io/managed-by" true
+  "o11y.dev/service-role" true
+-}}
+{{- range $name, $_ := .Values.podLabels -}}
+  {{- if hasKey $reservedLabels $name -}}
+    {{- fail (printf "podLabels.%s is managed by the chart and cannot be overridden" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $_ := .Values.service.labels -}}
+  {{- if hasKey $reservedLabels $name -}}
+    {{- fail (printf "service.labels.%s is managed by the chart and cannot be overridden" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $_ := .Values.statefulSet.headlessService.labels -}}
+  {{- if hasKey $reservedLabels $name -}}
+    {{- fail (printf "statefulSet.headlessService.labels.%s is managed by the chart and cannot be overridden" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $_ := .Values.persistence.labels -}}
+  {{- if hasKey $reservedLabels $name -}}
+    {{- fail (printf "persistence.labels.%s is managed by the chart and cannot be overridden" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $_ := .Values.serviceMonitor.labels -}}
+  {{- if hasKey $reservedLabels $name -}}
+    {{- fail (printf "serviceMonitor.labels.%s is managed by the chart and cannot be overridden" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- if hasKey .Values.persistence.annotations "helm.sh/resource-policy" -}}
+{{- fail "persistence.annotations cannot override helm.sh/resource-policy" -}}
+{{- end -}}
+{{- if and (eq .Values.mode "statefulset") .Values.service.enabled (eq (include "o11y-opamp-supervisor.headlessServiceName" .) (include "o11y-opamp-supervisor.fullname" .)) -}}
+{{- fail "statefulSet.headlessService.name must differ from the primary Service name" -}}
+{{- end -}}
+{{- if and (eq .Values.mode "statefulset") .Values.publicService.enabled (eq (include "o11y-opamp-supervisor.headlessServiceName" .) "otel-collector-public") -}}
+{{- fail "statefulSet.headlessService.name must differ from the public Service name" -}}
+{{- end -}}
+
+{{- $volumeNames := dict
+  "supervisor-config" true
+  "base-config" true
+  "opamp-data" true
+  "tmp" true
+  "hostfs" true
+  "varlogpods" true
+  "opamp-tls" true
+-}}
+{{- $declaredVolumeNames := dict
+  "supervisor-config" true
+  "base-config" true
+  "opamp-data" true
+  "tmp" true
+-}}
+{{- if .Values.controlPlane.tls.enabled -}}
+  {{- $_ := set $declaredVolumeNames "opamp-tls" true -}}
+{{- end -}}
+{{- if .Values.hostMonitoring.enabled -}}
+  {{- $_ := set $declaredVolumeNames "hostfs" true -}}
+  {{- $_ := set $declaredVolumeNames "varlogpods" true -}}
+{{- end -}}
+{{- range .Values.extraVolumes -}}
+  {{- if hasKey $volumeNames .name -}}
+    {{- fail (printf "extraVolumes name %q collides with a built-in or duplicate volume" .name) -}}
+  {{- end -}}
+  {{- $_ := set $volumeNames .name true -}}
+  {{- $_ := set $declaredVolumeNames .name true -}}
+{{- end -}}
+{{- range .Values.extraVolumeClaimTemplates -}}
+  {{- $name := .metadata.name -}}
+  {{- if hasKey $volumeNames $name -}}
+    {{- fail (printf "extraVolumeClaimTemplates name %q collides with a built-in, extra or duplicate volume" $name) -}}
+  {{- end -}}
+  {{- $_ := set $volumeNames $name true -}}
+  {{- $_ := set $declaredVolumeNames $name true -}}
+{{- end -}}
+
+{{- $mountPaths := dict
+  "/etc/supervisor/supervisor.yaml" true
+  "/etc/otelcol/base.yaml" true
+  "/var/lib/opamp" true
+  "/tmp" true
+  "/etc/o11y/opamp-tls" true
+-}}
+{{- if .Values.hostMonitoring.enabled -}}
+  {{- $_ := set $mountPaths "/hostfs" true -}}
+  {{- $_ := set $mountPaths "/var/log/pods" true -}}
+{{- end -}}
+{{- range .Values.extraVolumeMounts -}}
+  {{- if not (hasKey $declaredVolumeNames .name) -}}
+    {{- fail (printf "extraVolumeMounts volume %q is not declared" .name) -}}
+  {{- end -}}
+  {{- if hasKey $mountPaths .mountPath -}}
+    {{- fail (printf "extraVolumeMounts mountPath %q collides with a built-in or duplicate mount" .mountPath) -}}
+  {{- end -}}
+  {{- $_ := set $mountPaths .mountPath true -}}
+{{- end -}}
+
+{{- $environmentNames := dict
+  "OPAMP_TOKEN" true
+  "POD_NAME" true
+  "K8S_POD_NAME" true
+  "K8S_POD_UID" true
+  "K8S_NAMESPACE" true
+  "K8S_NODE_NAME" true
+  "K8S_NODE_IP" true
+  "O11Y_COLLECTOR_FEATURE_GATES" true
+-}}
+{{- range .Values.extraEnv -}}
+  {{- if hasKey $environmentNames .name -}}
+    {{- fail (printf "extraEnv name %q collides with a built-in or duplicate environment variable" .name) -}}
+  {{- end -}}
+  {{- if and (hasKey . "value") (hasKey . "valueFrom") -}}
+    {{- fail (printf "extraEnv %q cannot define both value and valueFrom" .name) -}}
+  {{- end -}}
+  {{- $_ := set $environmentNames .name true -}}
+{{- end -}}
+
+{{- $containerPortNames := dict "otel-health" true "opamp-health" true -}}
+{{- if eq .Values.probes.collectorHealthPort .Values.probes.supervisorHealthPort -}}
+{{- fail "probes.collectorHealthPort and probes.supervisorHealthPort must differ" -}}
+{{- end -}}
+{{- $containerPortNumbers := dict
+  (toString .Values.probes.collectorHealthPort) true
+  (toString .Values.probes.supervisorHealthPort) true
+-}}
+{{- if .Values.otlpPorts.enabled -}}
+  {{- if eq .Values.otlpPorts.grpc .Values.otlpPorts.http -}}
+    {{- fail "otlpPorts.grpc and otlpPorts.http must differ" -}}
+  {{- end -}}
+  {{- if or (hasKey $containerPortNumbers (toString .Values.otlpPorts.grpc)) (hasKey $containerPortNumbers (toString .Values.otlpPorts.http)) -}}
+    {{- fail "OTLP container ports must differ from the health ports" -}}
+  {{- end -}}
+  {{- $_ := set $containerPortNames "otlp-grpc" true -}}
+  {{- $_ := set $containerPortNames "otlp-http" true -}}
+  {{- $_ := set $containerPortNumbers (toString .Values.otlpPorts.grpc) true -}}
+  {{- $_ := set $containerPortNumbers (toString .Values.otlpPorts.http) true -}}
+{{- end -}}
+{{- range .Values.extraContainerPorts -}}
+  {{- if hasKey $containerPortNames .name -}}
+    {{- fail (printf "extraContainerPorts name %q collides with a built-in or duplicate port" .name) -}}
+  {{- end -}}
+  {{- if hasKey $containerPortNumbers (toString .containerPort) -}}
+    {{- fail (printf "extraContainerPorts containerPort %v collides with a built-in or duplicate port" .containerPort) -}}
+  {{- end -}}
+  {{- $_ := set $containerPortNames .name true -}}
+  {{- $_ := set $containerPortNumbers (toString .containerPort) true -}}
+{{- end -}}
+
+{{- $servicePortNames := dict -}}
+{{- $servicePortNumbers := dict -}}
+{{- if .Values.otlpPorts.enabled -}}
+  {{- $_ := set $servicePortNames "otlp-grpc" true -}}
+  {{- $_ := set $servicePortNames "otlp-http" true -}}
+  {{- $_ := set $servicePortNumbers (toString .Values.otlpPorts.grpc) true -}}
+  {{- $_ := set $servicePortNumbers (toString .Values.otlpPorts.http) true -}}
+{{- end -}}
+{{- range .Values.service.extraPorts -}}
+  {{- if hasKey $servicePortNames .name -}}
+    {{- fail (printf "service.extraPorts name %q collides with a built-in or duplicate port" .name) -}}
+  {{- end -}}
+  {{- if hasKey $servicePortNumbers (toString .port) -}}
+    {{- fail (printf "service.extraPorts port %v collides with a built-in or duplicate port" .port) -}}
+  {{- end -}}
+  {{- if and (kindIs "string" .targetPort) (not (hasKey $containerPortNames .targetPort)) -}}
+    {{- fail (printf "service.extraPorts targetPort %q does not reference a declared container port" .targetPort) -}}
+  {{- end -}}
+  {{- if and (hasKey . "nodePort") (not (or (eq $.Values.service.type "NodePort") (eq $.Values.service.type "LoadBalancer"))) -}}
+    {{- fail (printf "service.extraPorts %q sets nodePort but service.type is %s" .name $.Values.service.type) -}}
+  {{- end -}}
+  {{- $_ := set $servicePortNames .name true -}}
+  {{- $_ := set $servicePortNumbers (toString .port) true -}}
+{{- end -}}
+{{- if and .Values.serviceMonitor.enabled (not (hasKey $servicePortNames .Values.serviceMonitor.port)) -}}
+{{- fail (printf "serviceMonitor.port %q does not reference a declared Service port" .Values.serviceMonitor.port) -}}
+{{- end -}}
+
+{{- $initContainerNames := dict -}}
+{{- range .Values.initContainers -}}
+  {{- if or (eq .name "opamp-supervisor") (hasKey $initContainerNames .name) -}}
+    {{- fail (printf "initContainers name %q collides with the application container or another init container" .name) -}}
+  {{- end -}}
+  {{- $_ := set $initContainerNames .name true -}}
+{{- end -}}
