@@ -177,6 +177,22 @@ jobs:
             exit 1
           fi
 
+      - name: Verify image excludes README
+        env:
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="o11y-opamp-supervisor:ci-${ARCH}"
+          container="$(docker create --platform "linux/${ARCH}" "${image}")"
+          trap 'docker rm -f "${container}" >/dev/null 2>&1 || true' EXIT
+          if docker export "${container}" |
+             tar -tf - |
+             grep -Ei '(^|/)README\.md$' >/dev/null; then
+            echo "Supervisor image must not contain README.md" >&2
+            exit 1
+          fi
+
       - name: Scan image with pinned Trivy
         env:
           ARCH: ${{ matrix.arch }}
