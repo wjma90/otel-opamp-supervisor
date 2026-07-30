@@ -1,9 +1,9 @@
 # O11y OpAMP Supervisor
 
 Ejecuta OpenTelemetry Collector Contrib bajo el
-OpAMP Supervisor oficial. La versión publicada y desplegada `0.5.5` contiene
-ambos binarios upstream `0.156.0`, obtenidos desde imágenes fijadas por digest
-durante el build, e incorpora el soporte StatefulSet descrito más adelante.
+OpAMP Supervisor oficial. La versión preparada `0.156.0-o11y.1` contiene ambos
+binarios upstream `0.156.0`, obtenidos desde imágenes fijadas por digest durante
+el build, e incorpora el soporte StatefulSet descrito más adelante.
 
 No existe bootstrap, descarga ni upgrade de binarios en runtime. El Supervisor
 sólo usa OpAMP HTTP polling para recibir y validar la remote config del
@@ -37,9 +37,14 @@ Helm la incorpora con `.Files.Get`; el template no mantiene una segunda copia.
 
 | Componente | Versión
 |---|---|
-| Producto O11y Supervisor | `0.5.5`
+| Producto O11y Supervisor | `0.156.0-o11y.1`
 | OpAMP Supervisor upstream | `0.156.0`
 | Collector Contrib upstream | `0.156.0`
+
+El identificador sigue `<versión-otel>-o11y.<revisión>`. El prefijo corresponde
+a la versión común de Supervisor y Collector; la revisión aumenta cuando cambia
+el empaquetado O11y sin cambiar los binarios upstream. El tag Git agrega `v`:
+`v0.156.0-o11y.1`.
 
 Los manifiestos de plataforma publicados son para AMD64 y ARM64.
 
@@ -142,16 +147,14 @@ helm upgrade --install o11y-opamp-supervisor \
   --namespace o11y \
   --create-namespace \
   --set image.repository=wjma90/o11y-opamp-supervisor \
-  --set image.tag=0.5.5 \
-  --set image.digest=sha256:78d939a3f9c5cf09edb1973bcf1b32e813553badab3c0a3e78c9c80f576f08ca \
+  --set image.tag=0.156.0-o11y.1 \
   --set controlPlane.endpoint=http://control-plane.o11y.svc.cluster.local:4320/v1/opamp
 ```
 
 Un consumidor real debe aportar su identidad, modo de workload, recursos,
 imagen inmutable y demás diferencias mediante su propio `values.yaml`. La base
 NOP no se reemplaza desde values. `collector.featureGates` requiere la imagen
-`0.5.0` o posterior porque el wrapper `0.4.1` no transmite esos gates al
-Collector hijo.
+actual; el wrapper histórico `0.4.1` no transmite esos gates al Collector hijo.
 
 ## Instalar el chart publicado en GHCR
 
@@ -163,11 +166,11 @@ helm registry login ghcr.io
 
 helm upgrade --install o11y-opamp-supervisor \
   oci://ghcr.io/<owner>/charts/o11y-opamp-supervisor \
-  --version 0.5.5 \
+  --version 0.156.0-o11y.1 \
   --namespace o11y \
   --create-namespace \
   --set image.repository=ghcr.io/<owner>/o11y-opamp-supervisor \
-  --set image.tag=0.5.5 \
+  --set image.tag=0.156.0-o11y.1 \
   --set controlPlane.endpoint=http://control-plane.o11y.svc.cluster.local:4320/v1/opamp
 ```
 

@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.metadata.outputs.version }}
+      upstream_version: ${{ steps.metadata.outputs.upstream_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,9 +47,30 @@ jobs:
           chart_version="$(awk '$1 == "version:" {gsub(/\"/, "", $2); print $2; exit}' "${CHART_DIR}/Chart.yaml")"
           chart_app_version="$(awk '$1 == "appVersion:" {gsub(/\"/, "", $2); print $2; exit}' "${CHART_DIR}/Chart.yaml")"
           image_tag="$(awk '$1 == "tag:" {gsub(/\"/, "", $2); print $2; exit}' "${CHART_DIR}/values.yaml")"
+          docker_otel_version_count="$(
+            awk -F= '$1 == "ARG OTEL_VERSION" {count++} END {print count + 0}' Dockerfile
+          )"
+          docker_otel_version="$(
+            awk -F= '$1 == "ARG OTEL_VERSION" {print $2; exit}' Dockerfile
+          )"
 
-          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "VERSION must be semantic x.y.z" >&2
+          if [[ ! "${version}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-o11y\.([1-9][0-9]*)$ ]]; then
+            echo "VERSION must use <otel-version>-o11y.<revision>" >&2
+            exit 1
+          fi
+          upstream_version="${BASH_REMATCH[1]}"
+          if [[ "${docker_otel_version_count}" != "1" ||
+                "${docker_otel_version}" != "${upstream_version}" ]]; then
+            echo "release upstream version must match Dockerfile ARG OTEL_VERSION" >&2
+            exit 1
+          fi
+          if ! grep -Fqx \
+            "FROM otel/opentelemetry-collector-contrib:\${OTEL_VERSION}@\${OTEL_COLLECTOR_DIGEST} AS collector" \
+            Dockerfile ||
+             ! grep -Fqx \
+            "FROM ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-opampsupervisor:\${OTEL_VERSION}@\${OTEL_SUPERVISOR_DIGEST} AS supervisor" \
+            Dockerfile; then
+            echo "Collector and Supervisor images must share Dockerfile ARG OTEL_VERSION" >&2
             exit 1
           fi
           if [[ "${chart_version}" != "${version}" ||
@@ -63,6 +85,7 @@ jobs:
           fi
 
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "upstream_version=${upstream_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Validate shell and render contract
         shell: bash
@@ -280,6 +303,7 @@ jobs:
           CHART_REGISTRY: ${{ steps.names.outputs.chart_registry }}
           IMAGE: ${{ steps.names.outputs.image }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          UPSTREAM_VERSION: ${{ needs.verify.outputs.upstream_version }}
           VERSION: ${{ needs.verify.outputs.version }}
         shell: bash
         run: |
@@ -288,6 +312,8 @@ jobs:
             echo
             echo "- Image: \`${IMAGE}@${IMAGE_DIGEST}\`"
             echo "- Chart: \`${CHART_REGISTRY}/o11y-opamp-supervisor:${VERSION}\`"
+            echo "- OpAMP Supervisor upstream: \`${UPSTREAM_VERSION}\`"
+            echo "- Collector Contrib upstream: \`${UPSTREAM_VERSION}\`"
             echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
             echo "- BuildKit SBOM and provenance: enabled"
           } >> "${GITHUB_STEP_SUMMARY}"

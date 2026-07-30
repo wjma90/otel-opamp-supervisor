@@ -5,7 +5,7 @@ server:
     X-O11y-Cluster: compose-local
     X-O11y-Collector-Role: all-in-one
     X-O11y-Managed-By: opamp-supervisor
-    X-O11y-Supervisor-Version: "0.5.5"
+    X-O11y-Supervisor-Version: "0.156.0-o11y.1"
     X-O11y-Collector-Version: "0.156.0"
     X-O11y-Base-Config-ID: collector-base.compose
     X-O11y-Base-Config-Source: bind-mount:charts/o11y-opamp-supervisor/collector-base/base.yaml

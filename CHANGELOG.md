@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.156.0-o11y.1 - 2026-07-30
+
+- Adopta `<versión-otel>-o11y.<revisión>` como identificador común del tag Git,
+  la imagen y el chart.
+- Usa un único `OTEL_VERSION=0.156.0` para construir Supervisor y Collector
+  Contrib, conservando sus imágenes fijadas por digest.
+- El workflow valida que el prefijo de la release coincida con ambos binarios
+  upstream y rechaza tags o metadatos que no respeten esa asociación.
+
 ## 0.5.5 - 2026-07-25
 
 - Expone y valida `telemetry.logs.encoding` con los valores upstream `console`

@@ -5,7 +5,7 @@ component: collector
 
 image:
   repository: wjma90/o11y-opamp-supervisor
-  tag: 0.5.5
+  tag: "0.156.0-o11y.1"
   digest: ""
   pullPolicy: IfNotPresent
 

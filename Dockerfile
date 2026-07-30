@@ -1,12 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
-ARG OTEL_COLLECTOR_VERSION=0.156.0
+ARG OTEL_VERSION=0.156.0
 ARG OTEL_COLLECTOR_DIGEST=sha256:125bdbeb7590cc1952c5b3430ecf14063568980c2c93d5b38676cc0446ed8108
-ARG OTEL_SUPERVISOR_VERSION=0.156.0
 ARG OTEL_SUPERVISOR_DIGEST=sha256:cc645f204fdcd03bb119180b7f7a30c2c19febfcbefde3b59f1576cd021550f6
 
-FROM otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION}@${OTEL_COLLECTOR_DIGEST} AS collector
-FROM ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-opampsupervisor:${OTEL_SUPERVISOR_VERSION}@${OTEL_SUPERVISOR_DIGEST} AS supervisor
+FROM otel/opentelemetry-collector-contrib:${OTEL_VERSION}@${OTEL_COLLECTOR_DIGEST} AS collector
+FROM ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-opampsupervisor:${OTEL_VERSION}@${OTEL_SUPERVISOR_DIGEST} AS supervisor
 
 FROM supervisor AS assembled
 

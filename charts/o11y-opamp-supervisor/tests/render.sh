@@ -273,7 +273,7 @@ for rendered in \
   grep -Eq '^immutable: true$' "$rendered"
   grep -Fq 'base.yaml: |' "$rendered"
   grep -Fq 'supervisor.yaml: |' "$rendered"
-  grep -Eq 'X-O11y-Supervisor-Version: 0.5.5' "$rendered"
+  grep -Eq 'X-O11y-Supervisor-Version: 0.156.0-o11y.1' "$rendered"
   grep -Eq 'X-O11y-Collector-Version: 0.156.0' "$rendered"
   grep -Eq 'X-O11y-Base-Config-ID: collector-base\.' "$rendered"
   grep -Eq 'X-O11y-Base-Config-Revision: "1"' "$rendered"
@@ -291,7 +291,7 @@ for rendered in \
   grep -Eq 'name: O11Y_COLLECTOR_FEATURE_GATES' "$rendered"
   grep -Eq 'receivers:' "$rendered"
   grep -Fq 'nop: {}' "$rendered"
-  grep -Eq 'image: "wjma90/o11y-opamp-supervisor:0.5.5"' "$rendered"
+  grep -Eq 'image: "wjma90/o11y-opamp-supervisor:0.156.0-o11y.1"' "$rendered"
 done
 
 grep -Eq '^kind: Deployment$' "$test_dir/deployment.yaml"
