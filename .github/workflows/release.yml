@@ -19,6 +19,7 @@ permissions:
 env:
   CHART_DIR: charts/o11y-opamp-supervisor
   TRIVY_IMAGE: aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+  TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
 
 jobs:
   verify:
@@ -167,14 +168,16 @@ jobs:
           )
           image="o11y-opamp-supervisor:ci-${ARCH}"
           docker run --rm "${mounts[@]}" "${TRIVY_IMAGE}" \
-            image --platform "linux/${ARCH}" \
+            image --db-repository "${TRIVY_DB_REPOSITORY}" \
+              --platform "linux/${ARCH}" \
               --scanners vuln,secret,misconfig \
               --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
               --format json \
               --output "/reports/supervisor-linux-${ARCH}.json" \
               "${image}"
           docker run --rm "${mounts[@]}" "${TRIVY_IMAGE}" \
-            image --platform "linux/${ARCH}" \
+            image --db-repository "${TRIVY_DB_REPOSITORY}" \
+              --platform "linux/${ARCH}" \
               --scanners vuln,secret,misconfig \
               --severity CRITICAL \
               --exit-code 1 \

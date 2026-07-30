@@ -1,7 +1,7 @@
 # O11y OpAMP Supervisor
 
 Ejecuta OpenTelemetry Collector Contrib bajo el
-OpAMP Supervisor oficial. La versión publicada y desplegada `0.5.0` contiene
+OpAMP Supervisor oficial. La versión publicada y desplegada `0.5.5` contiene
 ambos binarios upstream `0.156.0`, obtenidos desde imágenes fijadas por digest
 durante el build, e incorpora el soporte StatefulSet descrito más adelante.
 
@@ -37,7 +37,7 @@ Helm la incorpora con `.Files.Get`; el template no mantiene una segunda copia.
 
 | Componente | Versión
 |---|---|
-| Producto O11y Supervisor | `0.5.0`
+| Producto O11y Supervisor | `0.5.5`
 | OpAMP Supervisor upstream | `0.156.0`
 | Collector Contrib upstream | `0.156.0`
 
@@ -70,9 +70,12 @@ los logs del Collector:
 telemetry:
   logs:
     level: warn
+    encoding: console
 ```
 
 Los niveles aceptados son `debug`, `info`, `warn` y `error`.
+Los encodings aceptados son `console`, para salida legible por línea, y `json`,
+para logs estructurados.
 
 TLS hacia OpAMP es opt-in y usa el soporte `server.tls.ca_file` del Supervisor
 upstream. El chart monta una CA desde un Secret existente:
@@ -139,8 +142,8 @@ helm upgrade --install o11y-opamp-supervisor \
   --namespace o11y \
   --create-namespace \
   --set image.repository=wjma90/o11y-opamp-supervisor \
-  --set image.tag=0.5.0 \
-  --set image.digest=sha256:1291e989ddf196bbca168f58bf8195707c95fc171a44ce1c2172be0aae8e76aa \
+  --set image.tag=0.5.5 \
+  --set image.digest=sha256:78d939a3f9c5cf09edb1973bcf1b32e813553badab3c0a3e78c9c80f576f08ca \
   --set controlPlane.endpoint=http://control-plane.o11y.svc.cluster.local:4320/v1/opamp
 ```
 
@@ -160,11 +163,11 @@ helm registry login ghcr.io
 
 helm upgrade --install o11y-opamp-supervisor \
   oci://ghcr.io/<owner>/charts/o11y-opamp-supervisor \
-  --version 0.5.0 \
+  --version 0.5.5 \
   --namespace o11y \
   --create-namespace \
   --set image.repository=ghcr.io/<owner>/o11y-opamp-supervisor \
-  --set image.tag=0.5.0 \
+  --set image.tag=0.5.5 \
   --set controlPlane.endpoint=http://control-plane.o11y.svc.cluster.local:4320/v1/opamp
 ```
 

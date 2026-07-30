@@ -243,7 +243,8 @@ helm template long-name "$chart" -n o11y \
   --set-string fullnameOverride=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >"$test_dir/long-name.yaml"
 helm template warn-log "$chart" -n o11y \
-  --set telemetry.logs.level=warn >"$test_dir/warn-log.yaml"
+  --set telemetry.logs.level=warn \
+  --set telemetry.logs.encoding=json >"$test_dir/warn-log.yaml"
 helm template tls-mode "$chart" -n o11y \
   --set controlPlane.endpoint=https://control-plane.o11y.svc.cluster.local:4320/v1/opamp \
   --set controlPlane.tls.enabled=true \
@@ -254,89 +255,91 @@ for rendered in \
   "$test_dir/deployment.yaml" \
   "$test_dir/daemonset.yaml" \
   "$test_dir/statefulset.yaml"; do
-  configmap_count=$(rg -c '^kind: ConfigMap$' "$rendered")
+  configmap_count=$(grep -Ec '^kind: ConfigMap$' "$rendered")
   if [ "$configmap_count" -ne 2 ]; then
     echo "render must contain exactly the Supervisor and immutable base ConfigMaps" >&2
     exit 1
   fi
-  if rg -q 'Authorization:|name: OPAMP_TOKEN|^kind: Secret$' "$rendered"; then
+  if grep -Eq 'Authorization:|name: OPAMP_TOKEN|^kind: Secret$' "$rendered"; then
     echo "disabled auth mode must omit Authorization, token env and generated Secret" >&2
     exit 1
   fi
-  if rg -qi 'supervisor/bootstrap|BOOTSTRAP_|bootstrap-data|managed\.yaml' "$rendered"; then
+  if grep -Eqi 'supervisor/bootstrap|BOOTSTRAP_|bootstrap-data|managed\.yaml' "$rendered"; then
     echo "render must not retain runtime bootstrap or a local managed config" >&2
     exit 1
   fi
-  rg -q 'helm.sh/resource-policy: keep' "$rendered"
-  rg -q 'o11y.dev/protected-from-control-plane: "true"' "$rendered"
-  rg -q '^immutable: true$' "$rendered"
-  rg -q 'base.yaml: |' "$rendered"
-  rg -q 'supervisor.yaml: |' "$rendered"
-  rg -q 'X-O11y-Supervisor-Version: 0.5.4' "$rendered"
-  rg -q 'X-O11y-Collector-Version: 0.156.0' "$rendered"
-  rg -q 'X-O11y-Base-Config-ID: collector-base\.' "$rendered"
-  rg -q 'X-O11y-Base-Config-Revision: "1"' "$rendered"
-  rg -q 'X-O11y-Base-Config-Default: "true"' "$rendered"
-  rg -q 'X-O11y-Base-Config-Source: ConfigMap/o11y/' "$rendered"
-  rg -q 'X-O11y-Base-Config-Managed-By: kubernetes' "$rendered"
-  rg -q 'accepts_remote_config: true' "$rendered"
-  rg -q 'level: info' "$rendered"
-  if rg -q 'ca_file:|mountPath: /etc/o11y/opamp-tls' "$rendered"; then
+  grep -Eq 'helm.sh/resource-policy: keep' "$rendered"
+  grep -Eq 'o11y.dev/protected-from-control-plane: "true"' "$rendered"
+  grep -Eq '^immutable: true$' "$rendered"
+  grep -Fq 'base.yaml: |' "$rendered"
+  grep -Fq 'supervisor.yaml: |' "$rendered"
+  grep -Eq 'X-O11y-Supervisor-Version: 0.5.5' "$rendered"
+  grep -Eq 'X-O11y-Collector-Version: 0.156.0' "$rendered"
+  grep -Eq 'X-O11y-Base-Config-ID: collector-base\.' "$rendered"
+  grep -Eq 'X-O11y-Base-Config-Revision: "1"' "$rendered"
+  grep -Eq 'X-O11y-Base-Config-Default: "true"' "$rendered"
+  grep -Eq 'X-O11y-Base-Config-Source: ConfigMap/o11y/' "$rendered"
+  grep -Eq 'X-O11y-Base-Config-Managed-By: kubernetes' "$rendered"
+  grep -Eq 'accepts_remote_config: true' "$rendered"
+  grep -Eq 'level: info' "$rendered"
+  grep -Eq 'encoding: console' "$rendered"
+  if grep -Eq 'ca_file:|mountPath: /etc/o11y/opamp-tls' "$rendered"; then
     echo "default TLS-disabled render must not mount a CA" >&2
     exit 1
   fi
-  rg -q 'mountPath: /etc/otelcol/base.yaml' "$rendered"
-  rg -q 'name: O11Y_COLLECTOR_FEATURE_GATES' "$rendered"
-  rg -q 'receivers:' "$rendered"
-  rg -Fq 'nop: {}' "$rendered"
-  rg -q 'image: "wjma90/o11y-opamp-supervisor:0.5.4"' "$rendered"
+  grep -Eq 'mountPath: /etc/otelcol/base.yaml' "$rendered"
+  grep -Eq 'name: O11Y_COLLECTOR_FEATURE_GATES' "$rendered"
+  grep -Eq 'receivers:' "$rendered"
+  grep -Fq 'nop: {}' "$rendered"
+  grep -Eq 'image: "wjma90/o11y-opamp-supervisor:0.5.5"' "$rendered"
 done
 
-rg -q '^kind: Deployment$' "$test_dir/deployment.yaml"
-rg -q '^  replicas: 1$' "$test_dir/deployment.yaml"
-rg -q '^    type: Recreate$' "$test_dir/deployment.yaml"
-if rg -q '^kind: Service$|^kind: StatefulSet$|^kind: PersistentVolumeClaim$' \
+grep -Eq '^kind: Deployment$' "$test_dir/deployment.yaml"
+grep -Eq '^  replicas: 1$' "$test_dir/deployment.yaml"
+grep -Eq '^    type: Recreate$' "$test_dir/deployment.yaml"
+if grep -Eq '^kind: Service$|^kind: StatefulSet$|^kind: PersistentVolumeClaim$' \
   "$test_dir/deployment.yaml"; then
   echo "default Deployment render gained stateful or persistence resources" >&2
   exit 1
 fi
 
-rg -q 'X-O11y-Supervisor-Version: 0.4.1' "$test_dir/legacy-image.yaml"
-rg -q 'app.kubernetes.io/version: "0.4.1"' "$test_dir/legacy-image.yaml"
-rg -q 'image: "wjma90/o11y-opamp-supervisor:0.4.1"' "$test_dir/legacy-image.yaml"
-rg -q '^  name: [a-z0-9-]{1,45}-base-[a-f0-9]{12}$' \
+grep -Eq 'X-O11y-Supervisor-Version: 0.4.1' "$test_dir/legacy-image.yaml"
+grep -Eq 'app.kubernetes.io/version: "0.4.1"' "$test_dir/legacy-image.yaml"
+grep -Eq 'image: "wjma90/o11y-opamp-supervisor:0.4.1"' "$test_dir/legacy-image.yaml"
+grep -Eq '^  name: [a-z0-9-]{1,45}-base-[a-f0-9]{12}$' \
   "$test_dir/long-name.yaml"
-rg -q 'level: warn' "$test_dir/warn-log.yaml"
-rg -q 'ca_file: /etc/o11y/opamp-tls/ca.crt' "$test_dir/tls.yaml"
-rg -q 'mountPath: /etc/o11y/opamp-tls' "$test_dir/tls.yaml"
-rg -q 'secretName: "opamp-server-ca"' "$test_dir/tls.yaml"
-if rg -q '^kind: Secret$' "$test_dir/tls.yaml"; then
+grep -Eq 'level: warn' "$test_dir/warn-log.yaml"
+grep -Eq 'encoding: json' "$test_dir/warn-log.yaml"
+grep -Eq 'ca_file: /etc/o11y/opamp-tls/ca.crt' "$test_dir/tls.yaml"
+grep -Eq 'mountPath: /etc/o11y/opamp-tls' "$test_dir/tls.yaml"
+grep -Eq 'secretName: "opamp-server-ca"' "$test_dir/tls.yaml"
+if grep -Eq '^kind: Secret$' "$test_dir/tls.yaml"; then
   echo "TLS mode unexpectedly generated a Secret" >&2
   exit 1
 fi
 
-rg -q '^kind: DaemonSet$' "$test_dir/daemonset.yaml"
-rg -q 'mountPath: /hostfs' "$test_dir/daemonset.yaml"
-rg -q 'nodes/proxy' "$test_dir/daemonset.yaml"
-if rg -q '^kind: StatefulSet$|^kind: PersistentVolumeClaim$' \
+grep -Eq '^kind: DaemonSet$' "$test_dir/daemonset.yaml"
+grep -Eq 'mountPath: /hostfs' "$test_dir/daemonset.yaml"
+grep -Eq 'nodes/proxy' "$test_dir/daemonset.yaml"
+if grep -Eq '^kind: StatefulSet$|^kind: PersistentVolumeClaim$' \
   "$test_dir/daemonset.yaml"; then
   echo "DaemonSet render gained stateful or persistence resources" >&2
   exit 1
 fi
 
 stateful="$test_dir/statefulset.yaml"
-rg -q '^kind: StatefulSet$' "$stateful"
-rg -q '^  replicas: 3$' "$stateful"
-rg -q '^  serviceName: otel-backends-traces-collector-headless$' "$stateful"
-rg -q '^  podManagementPolicy: Parallel$' "$stateful"
-rg -q '^    whenDeleted: Retain$' "$stateful"
-rg -q '^    whenScaled: Delete$' "$stateful"
-rg -q '^  volumeClaimTemplates:$' "$stateful"
-rg -q '^        name: opamp-data$' "$stateful"
-rg -q '^    - metadata:$' "$stateful"
-rg -q '^        name: storage-vol$' "$stateful"
-rg -q '^        name: wal-vol$' "$stateful"
-if rg -q '^kind: PersistentVolumeClaim$' "$stateful"; then
+grep -Eq '^kind: StatefulSet$' "$stateful"
+grep -Eq '^  replicas: 3$' "$stateful"
+grep -Eq '^  serviceName: otel-backends-traces-collector-headless$' "$stateful"
+grep -Eq '^  podManagementPolicy: Parallel$' "$stateful"
+grep -Eq '^    whenDeleted: Retain$' "$stateful"
+grep -Eq '^    whenScaled: Delete$' "$stateful"
+grep -Eq '^  volumeClaimTemplates:$' "$stateful"
+grep -Eq '^        name: opamp-data$' "$stateful"
+grep -Eq '^    - metadata:$' "$stateful"
+grep -Eq '^        name: storage-vol$' "$stateful"
+grep -Eq '^        name: wal-vol$' "$stateful"
+if grep -Eq '^kind: PersistentVolumeClaim$' "$stateful"; then
   echo "StatefulSet persistence must use volumeClaimTemplates, not a standalone PVC" >&2
   exit 1
 fi
@@ -344,61 +347,62 @@ if awk '
     capture && /^---$/ { exit }
     /^  volumeClaimTemplates:$/ { capture=1 }
     capture { print }
-  ' "$stateful" | rg -q 'helm.sh/chart:|app.kubernetes.io/version:'; then
+  ' "$stateful" | grep -Eq 'helm.sh/chart:|app.kubernetes.io/version:'; then
   echo "volumeClaimTemplates must not contain release-version labels because the template is immutable" >&2
   exit 1
 fi
-rg -q '^  clusterIP: None$' "$stateful"
-rg -q '^  name: otel-backends-traces-collector-headless$' "$stateful"
-rg -q '^      serviceAccountName: otelcol-prod$' "$stateful"
-if rg -q '^kind: ServiceAccount$' "$stateful"; then
+grep -Eq '^  clusterIP: None$' "$stateful"
+grep -Eq '^  name: otel-backends-traces-collector-headless$' "$stateful"
+grep -Eq '^      serviceAccountName: otelcol-prod$' "$stateful"
+if grep -Eq '^kind: ServiceAccount$' "$stateful"; then
   echo "external ServiceAccount mode unexpectedly created a ServiceAccount" >&2
   exit 1
 fi
-rg -q '^kind: Role$' "$stateful"
-rg -q '^kind: RoleBinding$' "$stateful"
-if rg -q '^kind: ClusterRole$|^kind: ClusterRoleBinding$' "$stateful"; then
+grep -Eq '^kind: Role$' "$stateful"
+grep -Eq '^kind: RoleBinding$' "$stateful"
+if grep -Eq '^kind: ClusterRole$|^kind: ClusterRoleBinding$' "$stateful"; then
   echo "namespaced RBAC unexpectedly created cluster-wide permissions" >&2
   exit 1
 fi
-rg -q '^kind: ServiceMonitor$' "$stateful"
-rg -q '^[[:space:]]+o11y.dev/service-role: primary$' "$stateful"
-rg -q '^[[:space:]]+- key: group$' "$stateful"
-rg -q '^[[:space:]]+topologySpreadConstraints:$' "$stateful"
-rg -q '^[[:space:]]+imagePullSecrets:$' "$stateful"
-rg -q '^[[:space:]]+initContainers:$' "$stateful"
-rg -q '^[[:space:]]+name: prepare-storage$' "$stateful"
-rg -q '^[[:space:]]+secretName: otel-collector-tls$' "$stateful"
-rg -q '^[[:space:]]+name: otel-collector-overrides$' "$stateful"
-rg -q '^[[:space:]]+secretKeyRef:$' "$stateful"
-rg -q '^[[:space:]]+configMapKeyRef:$' "$stateful"
-rg -q '^[[:space:]]+envFrom:$' "$stateful"
-rg -q '^[[:space:]]+name: collector-runtime-secret$' "$stateful"
-rg -q '^[[:space:]]+- name: O11Y_COLLECTOR_FEATURE_GATES$' "$stateful"
-rg -Fq 'exporter.prometheusremotewritexporter.RetryOn429,exporter.prometheusremotewritexporter.EnableMultipleWorkers' "$stateful"
-rg -q '^[[:space:]]+- name: monitoring$' "$stateful"
-rg -q '^[[:space:]]+o11y.dev/service-role: headless$' "$stateful"
+grep -Eq '^kind: ServiceMonitor$' "$stateful"
+grep -Eq '^[[:space:]]+o11y.dev/service-role: primary$' "$stateful"
+grep -Eq '^[[:space:]]+- key: group$' "$stateful"
+grep -Eq '^[[:space:]]+topologySpreadConstraints:$' "$stateful"
+grep -Eq '^[[:space:]]+imagePullSecrets:$' "$stateful"
+grep -Eq '^[[:space:]]+initContainers:$' "$stateful"
+grep -Eq '^[[:space:]]+name: prepare-storage$' "$stateful"
+grep -Eq '^[[:space:]]+secretName: otel-collector-tls$' "$stateful"
+grep -Eq '^[[:space:]]+name: otel-collector-overrides$' "$stateful"
+grep -Eq '^[[:space:]]+secretKeyRef:$' "$stateful"
+grep -Eq '^[[:space:]]+configMapKeyRef:$' "$stateful"
+grep -Eq '^[[:space:]]+envFrom:$' "$stateful"
+grep -Eq '^[[:space:]]+name: collector-runtime-secret$' "$stateful"
+grep -Eq '^[[:space:]]+- name: O11Y_COLLECTOR_FEATURE_GATES$' "$stateful"
+grep -Fq 'exporter.prometheusremotewritexporter.RetryOn429,exporter.prometheusremotewritexporter.EnableMultipleWorkers' "$stateful"
+grep -Eq '^[[:space:]]+- name: monitoring$' "$stateful"
+grep -Eq '^[[:space:]]+o11y.dev/service-role: headless$' "$stateful"
 
 deployment_pvc="$test_dir/deployment-persistence-rendered.yaml"
-rg -q '^kind: Deployment$' "$deployment_pvc"
-rg -q '^kind: PersistentVolumeClaim$' "$deployment_pvc"
-rg -q '^            claimName: o11y-opamp-supervisor-opamp-data$' "$deployment_pvc"
+grep -Eq '^kind: Deployment$' "$deployment_pvc"
+grep -Eq '^kind: PersistentVolumeClaim$' "$deployment_pvc"
+grep -Eq '^            claimName: o11y-opamp-supervisor-opamp-data$' "$deployment_pvc"
 
 helm template token-mode "$chart" -n o11y \
   --set controlPlane.authMode=token \
   --set controlPlane.existingSecret=opamp-auth >"$test_dir/token.yaml"
-if rg -q '^kind: Secret$' "$test_dir/token.yaml"; then
+if grep -Eq '^kind: Secret$' "$test_dir/token.yaml"; then
   echo "existingSecret mode unexpectedly generated a Secret" >&2
   exit 1
 fi
-rg -q 'name: OPAMP_TOKEN' "$test_dir/token.yaml"
-rg -q 'secretKeyRef:' "$test_dir/token.yaml"
-rg -q 'name: opamp-auth' "$test_dir/token.yaml"
-rg -Fq 'Authorization: Bearer ${env:OPAMP_TOKEN}' "$test_dir/token.yaml"
+grep -Eq 'name: OPAMP_TOKEN' "$test_dir/token.yaml"
+grep -Eq 'secretKeyRef:' "$test_dir/token.yaml"
+grep -Eq 'name: opamp-auth' "$test_dir/token.yaml"
+grep -Fq 'Authorization: Bearer ${env:OPAMP_TOKEN}' "$test_dir/token.yaml"
 
 expect_failure invalid-auth --set-string controlPlane.token=must-not-render
 expect_failure missing-token --set controlPlane.authMode=token
 expect_failure invalid-log-level --set telemetry.logs.level=verbose
+expect_failure invalid-log-encoding --set telemetry.logs.encoding=text
 expect_failure missing-tls-secret \
   --set controlPlane.endpoint=https://control-plane:4320/v1/opamp \
   --set controlPlane.tls.enabled=true

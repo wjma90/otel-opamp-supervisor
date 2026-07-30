@@ -49,6 +49,9 @@
 {{- if not (has .Values.telemetry.logs.level (list "debug" "info" "warn" "error")) -}}
 {{- fail "telemetry.logs.level must be one of debug, info, warn or error" -}}
 {{- end -}}
+{{- if not (has .Values.telemetry.logs.encoding (list "console" "json")) -}}
+{{- fail "telemetry.logs.encoding must be one of console or json" -}}
+{{- end -}}
 {{- if and .Values.controlPlane.tls.enabled (not .Values.controlPlane.tls.existingSecret) -}}
 {{- fail "controlPlane.tls.existingSecret is required when controlPlane.tls.enabled=true" -}}
 {{- end -}}

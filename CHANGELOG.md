@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.5.5 - 2026-07-25
+
+- Expone y valida `telemetry.logs.encoding` con los valores upstream `console`
+  y `json`.
+- Usa `console` por defecto y permite que cada despliegue conserve `json` si
+  necesita logs estructurados.
+- Los tests Helm usan `grep` disponible en el runner y ya no dependen de
+  `ripgrep`, que no está instalado por el workflow.
+- Trivy descarga su base desde el repositorio oficial en GHCR, evitando la
+  dependencia del mirror por defecto que puede degradarse.
+
 ## Chart 0.5.2 - 2026-07-24
 
 - Expone `controlPlane.tls` y renderiza `server.tls.ca_file` para confiar en

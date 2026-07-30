@@ -56,3 +56,4 @@ data:
     telemetry:
       logs:
         level: {{ .Values.telemetry.logs.level }}
+        encoding: {{ .Values.telemetry.logs.encoding }}

@@ -5,7 +5,7 @@ component: collector
 
 image:
   repository: wjma90/o11y-opamp-supervisor
-  tag: 0.5.4
+  tag: 0.5.5
   digest: ""
   pullPolicy: IfNotPresent
 
@@ -31,6 +31,7 @@ controlPlane:
 telemetry:
   logs:
     level: info
+    encoding: console
 
 collector:
   version: "0.156.0"
